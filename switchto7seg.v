@@ -34,25 +34,25 @@ module aes_encrypt(plain_text, ld_plain_text, encrypt, reg_reset, word_sel_enabl
 	wire [127:0] todisplay128bit;
 	wire [15:0] todisplay16bit;
 	
-	wire reg_128bit_full_indicator;
+	// wire reg_128bit_full_indicator;
 	wire encryption_complete;
-
-	load_128bit_using_8bit_regs(plain_text, ld_plain_text, reg_reset, plaintext128bit, reg_128bit_full_indicator);
 	
-	display_16bit(plaintext128bit[15:0],digits);
+	load_128bit_using_8bit_regs(plain_text, ld_plain_text, reg_reset, plaintext128bit);
 	
-	aes(plaintext128bit, reg_128bit_full_indicator, encrypt, encrypted128bit, encryption_complete);
-	
-	assign done = encryption_complete;
+	aes(plaintext128bit, encrypt, encrypted128bit, encryption_complete);
 	
 	select_128bit_output(plaintext128bit, encrypted128bit, plain_or_encrypted, todisplay128bit);
 	
 	select_quarter_word(todisplay128bit, plain_text[2:0], word_sel_enabled, encryption_complete, todisplay16bit);
 	
+	display_16bit(todisplay16bit,digits);
+	
+	assign done = encryption_complete;
+	
+	
 endmodule  
 
 module display_16bit(input_16bit, output_28bit);
-
 	input [15:0] input_16bit;
 
 	output [27:0] output_28bit;
@@ -73,21 +73,24 @@ module select_quarter_word(to_display_128bit, qword_select, enable, encryption_c
 	
 	output reg [15:0] to_display_16bit; 
 	
-	always @((enable) & (encryption_complete_q)) begin
-		case(qword_select)
-			2'b000: to_display_16bit <= to_display_128bit[15:0];
-			2'b001: to_display_16bit <= to_display_128bit[31:16];
-			2'b010: to_display_16bit <= to_display_128bit[47:32];
-			2'b011: to_display_16bit <= to_display_128bit[63:48];
-			2'b100: to_display_16bit <= to_display_128bit[78:64];
-			2'b101: to_display_16bit <= to_display_128bit[95:79];
-			2'b110: to_display_16bit <= to_display_128bit[111:96];
-			2'b111: to_display_16bit <= to_display_128bit[127:112];
-		endcase
-	end	
+	always @(to_display_128bit or qword_select or enable) begin
+		if(enable) begin
+			case(qword_select)
+				2'b000: to_display_16bit <= to_display_128bit[15:0];
+				2'b001: to_display_16bit <= to_display_128bit[31:16];
+				2'b010: to_display_16bit <= to_display_128bit[47:32];
+				2'b011: to_display_16bit <= to_display_128bit[63:48];
+				2'b100: to_display_16bit <= to_display_128bit[78:64];
+				2'b101: to_display_16bit <= to_display_128bit[95:79];
+				2'b110: to_display_16bit <= to_display_128bit[111:96];
+				2'b111: to_display_16bit <= to_display_128bit[127:112];
+			endcase
+		end else begin
+			to_display_16bit <= to_display_128bit[15:0];
+		end
+	end
+	
 endmodule
-
-
 
 module select_128bit_output(unencrypted_128bit, encrypted_128bit, select_128bit, output_128bit);
 	input [127:0] unencrypted_128bit;
@@ -105,9 +108,8 @@ module select_128bit_output(unencrypted_128bit, encrypted_128bit, select_128bit,
 	
 endmodule
 
-module load_128bit_using_8bit_regs(input_8bit, ld_plain_text, reset_8bit, output_128bit, output_128bit_full);
+module load_128bit_using_8bit_regs(input_8bit, ld_plain_text, reset_8bit, output_128bit);
 	// Inputs
-	integer i;
 
 	input [7:0] input_8bit;
 	input ld_plain_text;
@@ -115,7 +117,7 @@ module load_128bit_using_8bit_regs(input_8bit, ld_plain_text, reset_8bit, output
 
 	// Outputs
 	output [127:0] output_128bit;
-	output reg output_128bit_full;
+	// output reg output_128bit_full;
 	
 	Reg8 Reg8_0(input_8bit, ld_plain_text, output_128bit[7:0], reset_8bit);
 	Reg8 Reg8_1(output_128bit[7:0], ld_plain_text, output_128bit[15:8], reset_8bit);
@@ -135,30 +137,27 @@ module load_128bit_using_8bit_regs(input_8bit, ld_plain_text, reset_8bit, output
 	Reg8 Reg8_15(output_128bit[119:111], ld_plain_text, output_128bit[127:119], reset_8bit);
 	
 	
-	always @(posedge ld_plain_text) begin;
-	
-		  if(i < 16) begin
-				i = i + 1;
-				output_128bit_full = 0;
-		  end else begin
-				output_128bit_full = 1;
-		  end
-	end
+	// always @(posedge ld_plain_text) begin;
+	// 	output_128bit_full = 1;
+	// end
 	
 endmodule
 
-module aes(plaintext_128bit, regfull, encrypt, encrypted_128bit, encryption_complete_aes);
+module aes(plaintext_128bit, encrypt, encrypted_128bit, encryption_complete_aes);
 	input [127:0] plaintext_128bit; 
-	input regfull;
 	input encrypt;	
 
 	output reg [127:0] encrypted_128bit;
 	output reg encryption_complete_aes;
 	
 	always @ (posedge encrypt) begin
-		if(encrypt && regfull)		
+		if(encrypt) begin
 			encrypted_128bit <= ~plaintext_128bit;
+			encryption_complete_aes <= 1;
+		end else begin
+			encrypted_128bit <= 128'bz;
 			encryption_complete_aes <= 0;
+		end
 	end
 	
 endmodule
